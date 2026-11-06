@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Noughts &amp; Crosses</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@500&display=swap">
+<style>
+/* Layout: one centered column — status line, 3×3 board, tally, controls. Graph-paper ground. */
+:root {
+  --bg: #eef1f6;
+  --grid: #dbe1ec;
+  --surface: #ffffff;
+  --fg: #1b2233;
+  --muted: #5d677d;
+  --line: #1b2233;
+  --x: #2547d0;
+  --o: #e09a12;
+  --win: #18a36a;
+  --display: "Syne", "Trebuchet MS", system-ui, sans-serif;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "DM Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161f; --grid: #1c2230; --surface: #191f2b; --fg: #e8ecf4; --muted: #98a2b8;
+    --line: #e8ecf4; --x: #7d97ff; --o: #ffc145; --win: #3fd68f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161f; --grid: #1c2230; --surface: #191f2b; --fg: #e8ecf4; --muted: #98a2b8;
+  --line: #e8ecf4; --x: #7d97ff; --o: #ffc145; --win: #3fd68f; color-scheme: dark;
+}
+
+html, body { min-height: 100%; }
+body {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 15px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 48px;
+}
+.wrap { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+
+header { display: flex; flex-direction: column; gap: 6px; }
+h1 {
+  font-family: var(--display); font-weight: 800; font-size: clamp(30px, 8vw, 42px);
+  line-height: 1; margin: 0; letter-spacing: -0.02em; text-wrap: balance;
+}
+h1 .amp { color: var(--o); }
+h1 .x { color: var(--x); }
+.status {
+  font-family: var(--display); font-weight: 600; font-size: 18px; min-height: 1.4em;
+  display: flex; align-items: center; gap: 8px;
+}
+.status .mark { font-family: var(--mono); font-size: 20px; }
+.status .mark.X { color: var(--x); }
+.status .mark.O { color: var(--o); }
+
+.board {
+  position: relative;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+  aspect-ratio: 1; width: 100%; max-width: 100%;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 6px 6px 0 var(--line);
+}
+.cell {
+  appearance: none; border: 0; background: transparent; padding: 0; margin: 0;
+  cursor: pointer; position: relative; color: inherit;
+  display: grid; place-items: center;
+}
+.cell:nth-child(3n+1), .cell:nth-child(3n+2) { border-right: 2px solid var(--line); }
+.cell:nth-child(-n+6) { border-bottom: 2px solid var(--line); }
+.cell:disabled { cursor: default; }
+.cell:not(:disabled):hover .ghost { opacity: .22; }
+.cell:focus-visible { outline: 3px solid var(--x); outline-offset: -6px; }
+.cell svg { width: 62%; height: 62%; overflow: visible; }
+.ghost { opacity: 0; transition: opacity .12s; }
+.cell svg path, .cell svg circle { fill: none; stroke-width: 11; stroke-linecap: round; }
+.cell .xs path { stroke: var(--x); }
+.cell .os circle { stroke: var(--o); }
+.drawn path, .drawn circle { stroke-dasharray: 300; stroke-dashoffset: 300; animation: draw .32s ease-out forwards; }
+.drawn path + path { animation-delay: .12s; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.cell.dim svg { opacity: .3; transition: opacity .3s; }
+.strike { position: absolute; inset: 0; pointer-events: none; width: 100%; height: 100%; }
+.strike line { stroke: var(--win); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 160; stroke-dashoffset: 160; animation: draw .4s ease-out forwards; }
+
+.tally {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+}
+.tally div {
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: 4px;
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 2px;
+}
+.tally .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.tally .num { font-family: var(--mono); font-size: 24px; font-variant-numeric: tabular-nums; }
+.tally .tx .num { color: var(--x); }
+.tally .to .num { color: var(--o); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; border: 1.5px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--surface); }
+.seg button {
+  appearance: none; border: 0; background: transparent; color: var(--fg);
+  font: 500 14px var(--body); padding: 8px 12px; cursor: pointer;
+}
+.seg button + button { border-left: 1.5px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--line); color: var(--bg); }
+.seg button:focus-visible, .btn:focus-visible { outline: 3px solid var(--x); outline-offset: 2px; }
+.btn {
+  appearance: none; border: 1.5px solid var(--line); border-radius: 4px; cursor: pointer;
+  background: var(--o); color: #1b2233; font: 600 14px var(--body); padding: 8px 14px;
+  box-shadow: 3px 3px 0 var(--line); transition: transform .08s, box-shadow .08s;
+}
+.btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--line); }
+.btn.ghosty { background: transparent; color: var(--fg); box-shadow: none; }
+.spacer { flex: 1; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .drawn path, .drawn circle, .strike line { animation: none; stroke-dashoffset: 0; }
+  .btn, .ghost { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><span class="x">Noughts</span> <span class="amp">&amp;</span> Crosses</h1>
+    <div class="status" id="status" aria-live="polite"></div>
+  </header>
+
+  <div class="board" id="board" role="grid" aria-label="Game board"></div>
+
+  <div class="tally" aria-label="Score">
+    <div class="tx"><span class="lbl" id="lblX">You (X)</span><span class="num" id="sX">0</span></div>
+    <div><span class="lbl">Draws</span><span class="num" id="sD">0</span></div>
+    <div class="to"><span class="lbl" id="lblO">Computer (O)</span><span class="num" id="sO">0</span></div>
+  </div>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Opponent">
+      <button id="modeCpu" aria-pressed="true">vs Computer</button>
+      <button id="mode2p" aria-pressed="false">2 Players</button>
+    </div>
+    <div class="seg" role="group" aria-label="Difficulty" id="diffGroup">
+      <button id="diffEasy" aria-pressed="false">Easy</button>
+      <button id="diffHard" aria-pressed="true">Unbeatable</button>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="newGame">New game</button>
+    <button class="btn ghosty" id="resetScore">Reset score</button>
+    <span class="spacer"></span>
+    <p class="hint">Keys 1–9 play a square</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  const X_SVG = '<svg class="xs" viewBox="0 0 100 100"><path d="M18 18 L82 82"/><path d="M82 18 L18 82"/></svg>';
+  const O_SVG = '<svg class="os" viewBox="0 0 100 100"><circle cx="50" cy="50" r="34"/></svg>';
+
+  const $ = id => document.getElementById(id);
+  const boardEl = $('board'), statusEl = $('status');
+
+  let s = {
+    cells: Array(9).fill(null), turn: 'X', over: false, winLine: null,
+    mode: 'cpu', diff: 'hard', score: { X: 0, O: 0, D: 0 }, starter: 'X'
+  };
+  let cpuTimer = null;
+
+  function winner(c) {
+    for (const l of LINES) { const [a,b,d] = l; if (c[a] && c[a] === c[b] && c[a] === c[d]) return { who: c[a], line: l }; }
+    return c.every(Boolean) ? { who: 'D' } : null;
+  }
+
+  function minimax(c, player, depth) {
+    const w = winner(c);
+    if (w) return { score: w.who === 'O' ? 10 - depth : w.who === 'X' ? depth - 10 : 0 };
+    let best = { score: player === 'O' ? -Infinity : Infinity, move: -1 };
+    for (let i = 0; i < 9; i++) {
+      if (c[i]) continue;
+      c[i] = player;
+      const r = minimax(c, player === 'O' ? 'X' : 'O', depth + 1);
+      c[i] = null;
+      if (player === 'O' ? r.score > best.score : r.score < best.score) best = { score: r.score, move: i };
+    }
+    return best;
+  }
+
+  function cpuMove() {
+    const free = s.cells.map((v,i) => v ? -1 : i).filter(i => i >= 0);
+    if (s.diff === 'easy' && Math.random() < 0.7) return free[Math.floor(Math.random() * free.length)];
+    if (free.length === 9) return [0,2,4,6,8][Math.floor(Math.random() * 5)];
+    return minimax(s.cells.slice(), 'O', 0).move;
+  }
+
+  function buildBoard() {
+    boardEl.innerHTML = '';
+    for (let i = 0; i < 9; i++) {
+      const b = document.createElement('button');
+      b.className = 'cell'; b.id = 'cell' + i; b.dataset.i = i;
+      b.addEventListener('click', () => play(i, true));
+      boardEl.appendChild(b);
+    }
+  }
+
+  function render(lastMove) {
+    s.cells.forEach((v, i) => {
+      const b = boardEl.children[i];
+      const cpuTurn = s.mode === 'cpu' && s.turn === 'O';
+      b.disabled = !!v || s.over || cpuTurn;
+      b.setAttribute('aria-label', 'Square ' + (i + 1) + (v ? ', ' + v : ', empty'));
+      if (v) {
+        if (b.dataset.v !== v) { b.innerHTML = v === 'X' ? X_SVG : O_SVG; if (i === lastMove) b.firstChild.classList.add('drawn'); b.dataset.v = v; }
+      } else {
+        b.dataset.v = '';
+        b.innerHTML = (s.over ? '' : '<span class="ghost" style="display:contents">' + (s.turn === 'X' ? X_SVG : O_SVG) + '</span>');
+        const g = b.querySelector('svg'); if (g) g.classList.add('ghost');
+      }
+      b.classList.toggle('dim', !!(s.winLine && !s.winLine.includes(i)));
+    });
+
+    const old = boardEl.querySelector('.strike'); if (old) old.remove();
+    if (s.winLine) {
+      const pos = i => [ (i % 3) * 33.333 + 16.667, Math.floor(i / 3) * 33.333 + 16.667 ];
+      let [x1,y1] = pos(s.winLine[0]), [x2,y2] = pos(s.winLine[2]);
+      const dx = (x2 - x1) * 0.18, dy = (y2 - y1) * 0.18;
+      const svg = '<svg class="strike" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="' + (x1-dx) + '" y1="' + (y1-dy) + '" x2="' + (x2+dx) + '" y2="' + (y2+dy) + '"/></svg>';
+      boardEl.insertAdjacentHTML('beforeend', svg);
+    }
+
+    const name = p => s.mode === 'cpu' ? (p === 'X' ? 'You' : 'Computer') : 'Player ' + p;
+    const mark = p => '<span class="mark ' + p + '">' + (p === 'X' ? '✕' : '◯') + '</span>';
+    const w = winner(s.cells);
+    if (w && w.who === 'D') statusEl.innerHTML = 'Draw. Nobody gets the line.';
+    else if (w) statusEl.innerHTML = mark(w.who) + (s.mode === 'cpu' ? (w.who === 'X' ? 'You win!' : 'Computer wins.') : name(w.who) + ' wins!');
+    else statusEl.innerHTML = mark(s.turn) + (s.mode === 'cpu' ? (s.turn === 'X' ? 'Your move' : 'Computer is thinking…') : name(s.turn) + ' to move');
+
+    $('sX').textContent = s.score.X; $('sO').textContent = s.score.O; $('sD').textContent = s.score.D;
+    $('lblX').textContent = s.mode === 'cpu' ? 'You (X)' : 'Player X';
+    $('lblO').textContent = s.mode === 'cpu' ? 'Computer (O)' : 'Player O';
+    $('modeCpu').setAttribute('aria-pressed', s.mode === 'cpu');
+    $('mode2p').setAttribute('aria-pressed', s.mode === '2p');
+    $('diffEasy').setAttribute('aria-pressed', s.diff === 'easy');
+    $('diffHard').setAttribute('aria-pressed', s.diff === 'hard');
+    $('diffGroup').hidden = s.mode !== 'cpu';
+  }
+
+  function play(i, byHuman) {
+    if (s.over || s.cells[i]) return;
+    if (byHuman && s.mode === 'cpu' && s.turn === 'O') return;
+    s.cells[i] = s.turn;
+    const w = winner(s.cells);
+    if (w) { s.over = true; s.winLine = w.line || null; s.score[w.who]++; }
+    else s.turn = s.turn === 'X' ? 'O' : 'X';
+    render(i);
+    maybeCpu();
+  }
+
+  function maybeCpu() {
+    clearTimeout(cpuTimer);
+    if (s.mode === 'cpu' && s.turn === 'O' && !s.over) cpuTimer = setTimeout(() => play(cpuMove(), false), 450);
+  }
+
+  function newGame() {
+    clearTimeout(cpuTimer);
+    s.starter = s.starter === 'X' ? 'O' : 'X';   // alternate who opens
+    s.cells = Array(9).fill(null); s.turn = s.starter; s.over = false; s.winLine = null;
+    boardEl.querySelectorAll('.cell').forEach(b => b.dataset.v = '');
+    render(); maybeCpu();
+  }
+
+  $('newGame').onclick = newGame;
+  $('resetScore').onclick = () => { s.score = { X: 0, O: 0, D: 0 }; render(); };
+  $('modeCpu').onclick = () => { if (s.mode !== 'cpu') { s.mode = 'cpu'; s.score = { X:0,O:0,D:0 }; s.starter = 'O'; newGame(); } };
+  $('mode2p').onclick = () => { if (s.mode !== '2p') { s.mode = '2p'; s.score = { X:0,O:0,D:0 }; s.starter = 'O'; newGame(); } };
+  $('diffEasy').onclick = () => { s.diff = 'easy'; render(); };
+  $('diffHard').onclick = () => { s.diff = 'hard'; render(); };
+  document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input, textarea')) return;
+    const n = parseInt(e.key, 10);
+    if (n >= 1 && n <= 9) play(n - 1, true);
+    else if (e.key === 'n' || e.key === 'N') newGame();
+  });
+
+  function start(data) {
+    if (data && data.cells) s = Object.assign(s, data);
+    buildBoard(); render(); maybeCpu();
+  }
+  window.claude?.hot?.snapshot?.(() => s);
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+
+</html>
